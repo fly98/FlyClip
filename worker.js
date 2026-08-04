@@ -43,6 +43,31 @@ const json = (obj, status = 200) =>
     headers: { 'Content-Type': 'application/json; charset=utf-8', ...CORS },
   });
 
+/**
+ * Comandi Rapidi non sa consegnare un URL come "File": lo risolve scaricando
+ * la pagina, quindi al posto del link arriva l'HTML intero (successo con i
+ * link di pagamento Amenitiz, 135 KB di sorgente al posto dell'indirizzo).
+ * Qui si riconosce quel caso e si recupera il link canonico.
+ *
+ * Si interviene solo su un documento completo che dichiari il proprio
+ * indirizzo: uno snippet di HTML copiato apposta resta testo.
+ */
+function htmlToUrl(t) {
+  const head = t.slice(0, 400).toLowerCase();
+  if (!head.includes('<!doctype html') && !head.includes('<html')) return t;
+
+  const patterns = [
+    /<link[^>]+rel=["']canonical["'][^>]+href=["']([^"']+)["']/i,
+    /<meta[^>]+property=["']og:url["'][^>]+content=["']([^"']+)["']/i,
+    /<meta[^>]+content=["']([^"']+)["'][^>]+property=["']og:url["']/i,
+  ];
+  for (const re of patterns) {
+    const m = re.exec(t);
+    if (m && /^https?:\/\//i.test(m[1])) return m[1].trim();
+  }
+  return t;
+}
+
 const isBlob = (kind) => kind === 'image' || kind === 'file';
 
 const EXT = {
@@ -307,7 +332,7 @@ export class Clip {
               mime: b.mime || 'image/png', name: b.name || nameHdr, device: b.device || device,
             };
           } else {
-            const text = rtfToText(String(b.text ?? ''));
+            const text = htmlToUrl(rtfToText(String(b.text ?? '')));
             payload = { kind: b.kind || guessKind(null, text), text, device: b.device || device, name: b.name || nameHdr };
           }
         } else if (ct && !ct.startsWith('text/')) {
@@ -321,7 +346,7 @@ export class Clip {
             bytes: buf, mime, name: nameHdr, device,
           };
         } else {
-          const text = rtfToText(await request.text());
+          const text = htmlToUrl(rtfToText(await request.text()));
           payload = { kind: guessKind(null, text), text, device, name: nameHdr };
         }
 
