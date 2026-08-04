@@ -26,7 +26,10 @@
 
 const CHUNK = 192 * 1024;      // dimensione chunk blob (limite riga SQLite DO ~2MB)
 const MAX_ITEMS = 300;                        // ritenzione per numero
-const MAX_AGE_DAYS = 7;                       // ritenzione per eta
+// Ritenzione per eta, differenziata per tipo: gli screenshot servono per
+// pochi minuti ma pesano quasi un mega, il testo dura e non occupa nulla.
+const MAX_AGE_DAYS = 7;                       // testo, link e casi non previsti
+const MAX_AGE_BY_KIND = { image: 1, file: 3 };
 const MAX_TOTAL_BYTES = 200 * 1024 * 1024;    // tetto complessivo dei recenti
 const MAX_BYTES = 20 * 1024 * 1024;           // tetto del singolo elemento
 
@@ -217,11 +220,12 @@ export class Clip {
    * rientra sotto il tetto.
    */
   prune() {
-    const cutoff = Date.now() - MAX_AGE_DAYS * 86400000;
+    const ora = Date.now();
+    const eta = (kind) => (MAX_AGE_BY_KIND[kind] ?? MAX_AGE_DAYS) * 86400000;
 
     const scaduti = this.rows(
-      `SELECT id FROM items WHERE pinned = 0 AND ts < ?`, cutoff
-    ).map(r => r.id);
+      `SELECT id, kind, ts FROM items WHERE pinned = 0`
+    ).filter(r => ora - r.ts > eta(r.kind)).map(r => r.id);
 
     const eccedenti = this.rows(
       `SELECT id FROM items WHERE pinned = 0 ORDER BY ts DESC LIMIT -1 OFFSET ?`, MAX_ITEMS
