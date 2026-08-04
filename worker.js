@@ -24,9 +24,10 @@
  */
 
 const CHUNK = 192 * 1024;      // dimensione chunk blob (limite riga SQLite DO ~2MB)
-const MAX_ITEMS = 300;         // ritenzione per numero
-const MAX_AGE_DAYS = 60;       // ritenzione per età
-const MAX_BYTES = 20 * 1024 * 1024;
+const MAX_ITEMS = 300;                        // ritenzione per numero
+const MAX_AGE_DAYS = 7;                       // ritenzione per eta
+const MAX_TOTAL_BYTES = 200 * 1024 * 1024;    // tetto complessivo dei recenti
+const MAX_BYTES = 20 * 1024 * 1024;           // tetto del singolo elemento
 
 const CORS = {
   'Access-Control-Allow-Origin': '*',
@@ -174,15 +175,36 @@ export class Clip {
     return { id, ts, kind, size };
   }
 
+  /**
+   * Ritenzione dei soli elementi recenti: l'Archivio non scade mai, altrimenti
+   * salvare non avrebbe senso. Tre limiti, applicati in quest'ordine: eta,
+   * numero, peso complessivo. Sul peso si eliminano i piu vecchi finche si
+   * rientra sotto il tetto.
+   */
   prune() {
     const cutoff = Date.now() - MAX_AGE_DAYS * 86400000;
-    const old = this.rows(
+
+    const scaduti = this.rows(
       `SELECT id FROM items WHERE pinned = 0 AND ts < ?`, cutoff
     ).map(r => r.id);
-    const extra = this.rows(
+
+    const eccedenti = this.rows(
       `SELECT id FROM items WHERE pinned = 0 ORDER BY ts DESC LIMIT -1 OFFSET ?`, MAX_ITEMS
     ).map(r => r.id);
-    for (const id of new Set([...old, ...extra])) this.remove(id);
+
+    const via = new Set([...scaduti, ...eccedenti]);
+
+    // peso: si scorre dal piu recente e si taglia quando si sfora
+    let totale = 0;
+    for (const r of this.rows(
+      `SELECT id, size FROM items WHERE pinned = 0 ORDER BY ts DESC`
+    )) {
+      if (via.has(r.id)) continue;
+      totale += r.size || 0;
+      if (totale > MAX_TOTAL_BYTES) via.add(r.id);
+    }
+
+    for (const id of via) this.remove(id);
   }
 
   remove(id) {
