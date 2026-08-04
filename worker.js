@@ -53,6 +53,15 @@ const EXT = {
   'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet': 'xlsx',
 };
 
+/** Estrae il nome da un header Content-Disposition, se presente. */
+function dispositionName(cd) {
+  if (!cd) return null;
+  const star = /filename\*=(?:UTF-8'')?([^;]+)/i.exec(cd);
+  if (star) { try { return decodeURIComponent(star[1].trim().replace(/^"|"$/g, '')); } catch { /* niente */ } }
+  const plain = /filename="?([^";]+)"?/i.exec(cd);
+  return plain ? plain[1].trim() : null;
+}
+
 /** Nome di salvataggio: quello originale se c'e, altrimenti dedotto dal MIME. */
 function fileName(row) {
   if (row.name) return row.name;
@@ -281,7 +290,11 @@ export class Clip {
       if (method === 'POST' && seg[0] === 'push') {
         const ct = (request.headers.get('Content-Type') || '').toLowerCase();
         const device = request.headers.get('X-Device') || url.searchParams.get('device') || null;
-        const nameHdr = request.headers.get('X-Filename') || url.searchParams.get('name') || null;
+        const nameHdr =
+          request.headers.get('X-Filename') ||
+          url.searchParams.get('name') ||
+          dispositionName(request.headers.get('Content-Disposition')) ||
+          null;
 
         let payload;
         if (ct.includes('application/json')) {
@@ -353,7 +366,17 @@ export class Clip {
           items = this.rows(
             `SELECT ${cols} FROM items ORDER BY pinned DESC, ts DESC LIMIT ?`, limit);
         }
-        return json({ ok: true, count: items.length, items: items.map(i => ({ ...i, pinned: !!i.pinned })) });
+        return json({
+          ok: true,
+          count: items.length,
+          items: items.map(i => ({
+            ...i,
+            pinned: !!i.pinned,
+            // per i binari si espone comunque un nome: se manca quello
+            // originale si usa lo stesso che verrebbe usato per il download
+            name: isBlob(i.kind) ? fileName(i) : i.name,
+          })),
+        });
       }
 
       // /item/:id
