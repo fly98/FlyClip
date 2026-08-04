@@ -303,7 +303,7 @@ function render() {
       ${body}
       <div class="acts">
         ${isFile
-          ? `<button class="pri" onclick="window.open('${API}/item/${i.id}?k=${encodeURIComponent(KEY)}','_blank')">Scarica</button>`
+          ? `<button class="pri" onclick="grab('${i.id}')">Scarica</button>`
           : `<button class="pri" onclick="copyItem('${i.id}','${i.kind}')">Copia</button>`}
         ${i.kind === 'url' ? `<button onclick="openUrl('${i.id}')">Apri</button>` : ''}
         ${isImg ? `<button onclick="window.open('${API}/item/${i.id}?k=${encodeURIComponent(KEY)}','_blank')">Apri</button>` : ''}
@@ -324,6 +324,16 @@ function extOf(i) {
 }
 
 // ---------- azioni ----------
+async function grab(id) {
+  window.open(API + '/item/' + id + '?k=' + encodeURIComponent(KEY), '_blank');
+  await bump(id);
+  load(true);
+}
+
+async function bump(id) {
+  try { await api('/bump/' + id, { method: 'POST' }); } catch (e) { /* non blocca la copia */ }
+}
+
 async function copyItem(id, kind) {
   try {
     if (kind === 'image') {
@@ -343,6 +353,9 @@ async function copyItem(id, kind) {
       await navigator.clipboard.writeText(t);
       toast('Copiato');
     }
+    // porta l'elemento in cima: il comando rapido "Incolla" prendera questo
+    await bump(id);
+    load(true);
   } catch (e) {
     toast('Copia non riuscita: ' + e.message, true);
   }
