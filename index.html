@@ -121,6 +121,12 @@
     word-break:break-all;cursor:pointer;-webkit-user-select:all;user-select:all;}
   .setup-row code:active{border-color:var(--acc);}
   .setup-row small{color:var(--dim);font-size:12px;line-height:1.45;display:block;}
+
+  .file{display:flex;align-items:center;gap:10px;padding:12px;background:var(--panel2);
+    border:1px solid var(--line);border-radius:10px;margin:8px 0;}
+  .file-ext{flex:none;font-size:11px;font-weight:700;letter-spacing:.5px;color:var(--acc);
+    border:1px solid var(--acc);border-radius:6px;padding:4px 7px;}
+  .file-name{color:var(--txt);font-size:13px;word-break:break-all;}
 </style>
 </head>
 <body>
@@ -308,9 +314,13 @@ function render() {
   }
   $('list').innerHTML = list.map(i => {
     const isImg = i.kind === 'image';
+    const isFile = i.kind === 'file';
     const body = isImg
       ? `<img class="thumb" loading="lazy" src="${API}/item/${i.id}?k=${encodeURIComponent(KEY)}" alt="">`
-      : `<div class="body${(i.preview || '').length > 300 ? ' long' : ''}">${esc(i.preview || '')}</div>`;
+      : isFile
+        ? `<div class="file"><span class="file-ext">${esc(extOf(i))}</span>
+             <span class="file-name">${esc(i.name || 'senza nome')}</span></div>`
+        : `<div class="body${(i.preview || '').length > 300 ? ' long' : ''}">${esc(i.preview || '')}</div>`;
     return `<div class="item${i.pinned ? ' pin' : ''}">
       <div class="meta">
         <span class="tag ${i.kind}">${i.kind}</span>
@@ -320,7 +330,9 @@ function render() {
       ${i.label ? `<div class="label">${esc(i.label)}</div>` : ''}
       ${body}
       <div class="acts">
-        <button class="pri" onclick="copyItem('${i.id}','${i.kind}')">Copia</button>
+        ${isFile
+          ? `<button class="pri" onclick="window.open('${API}/item/${i.id}?k=${encodeURIComponent(KEY)}','_blank')">Scarica</button>`
+          : `<button class="pri" onclick="copyItem('${i.id}','${i.kind}')">Copia</button>`}
         ${i.kind === 'url' ? `<button onclick="openUrl('${i.id}')">Apri</button>` : ''}
         ${isImg ? `<button onclick="window.open('${API}/item/${i.id}?k=${encodeURIComponent(KEY)}','_blank')">Apri</button>` : ''}
         <button onclick="pin('${i.id}')">${i.pinned ? 'Togli' : 'Salva'}</button>
@@ -329,6 +341,14 @@ function render() {
       </div>
     </div>`;
   }).join('');
+}
+
+function extOf(i) {
+  const n = i.name || '';
+  const fromName = n.includes('.') ? n.split('.').pop() : '';
+  if (fromName && fromName.length <= 5) return fromName.toUpperCase();
+  const m = (i.mime || '').split('/')[1] || 'file';
+  return m.split(/[.+-]/).pop().slice(0, 5).toUpperCase();
 }
 
 // ---------- azioni ----------
