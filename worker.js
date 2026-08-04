@@ -51,6 +51,46 @@ function guessKind(mime, text) {
   return 'text';
 }
 
+/**
+ * Gli appunti di iOS e macOS contengono spesso la versione RTF di un testo
+ * copiato da una pagina web. Comandi Rapidi spedisce quella, non il testo
+ * semplice, quindi la si riduce qui: cosi vale per qualunque sorgente senza
+ * dover toccare i comandi sul dispositivo.
+ */
+function rtfToText(s) {
+  if (!/^\s*{\\rtf/.test(s)) return s;
+
+  // L'RTF codifica i byte alti in Windows-1252, non in Latin-1: senza questa
+  // mappa apostrofi tipografici e trattini lunghi diventano caratteri di
+  // controllo invisibili (l'92accordo -> laccordo).
+  const CP1252 = {
+    0x80: '\u20AC', 0x82: '\u201A', 0x83: '\u0192', 0x84: '\u201E', 0x85: '\u2026',
+    0x86: '\u2020', 0x87: '\u2021', 0x88: '\u02C6', 0x89: '\u2030', 0x8A: '\u0160',
+    0x8B: '\u2039', 0x8C: '\u0152', 0x8E: '\u017D', 0x91: '\u2018', 0x92: '\u2019',
+    0x93: '\u201C', 0x94: '\u201D', 0x95: '\u2022', 0x96: '\u2013', 0x97: '\u2014',
+    0x98: '\u02DC', 0x99: '\u2122', 0x9A: '\u0161', 0x9B: '\u203A', 0x9C: '\u0153',
+    0x9E: '\u017E', 0x9F: '\u0178',
+  };
+
+  // via le tabelle di intestazione (font, colori, stili): sono solo metadati
+  let t = s.replace(/{\\(?:fonttbl|colortbl|stylesheet|\*\\expandedcolortbl|\*\\[a-z]+)[^{}]*(?:{[^{}]*}[^{}]*)*}/gi, '');
+
+  t = t
+    .replace(/\\'([0-9a-f]{2})/gi, (_, h) => {
+      const c = parseInt(h, 16);
+      return CP1252[c] || String.fromCharCode(c);
+    })
+    .replace(/\\u(-?\d+)\s?\??/g, (_, n) => String.fromCharCode(((+n) + 65536) % 65536))
+    .replace(/\\(par|line)\b\s?/g, '\n')
+    .replace(/\\tab\b\s?/g, '\t')
+    .replace(/\\([{}\\])/g, '$1')          // graffe e backslash veri
+    .replace(/\\[a-z]+-?\d*\s?/gi, '')     // ogni altra parola di controllo
+    .replace(/[{}]/g, '')
+    .replace(/\n{3,}/g, '\n\n');
+
+  return t.trim();
+}
+
 // ─────────────────────────────────────────────────────────────
 // Durable Object
 // ─────────────────────────────────────────────────────────────
@@ -212,7 +252,7 @@ export class Clip {
               mime: b.mime || 'image/png', name: b.name || nameHdr, device: b.device || device,
             };
           } else {
-            const text = String(b.text ?? '');
+            const text = rtfToText(String(b.text ?? ''));
             payload = { kind: b.kind || guessKind(null, text), text, device: b.device || device, name: b.name || nameHdr };
           }
         } else if (ct.startsWith('image/') || ct.startsWith('application/octet-stream')) {
@@ -220,7 +260,7 @@ export class Clip {
           if (buf.byteLength > MAX_BYTES) return json({ ok: false, error: 'troppo grande' }, 413);
           payload = { kind: 'image', bytes: buf, mime: ct.split(';')[0], name: nameHdr, device };
         } else {
-          const text = await request.text();
+          const text = rtfToText(await request.text());
           payload = { kind: guessKind(null, text), text, device, name: nameHdr };
         }
 
