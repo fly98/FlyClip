@@ -111,7 +111,9 @@
 <div id="gate" class="gate" hidden>
   <h1 style="font-size:22px">FlyClip</h1>
   <p style="color:var(--dim); font-size:14px">Inserisci la chiave API per accedere alla clipboard condivisa.</p>
-  <input id="gateKey" type="password" placeholder="API key" autocomplete="off">
+  <input id="gateKey" type="text" placeholder="API key" autocomplete="off"
+         autocapitalize="none" autocorrect="off" spellcheck="false"
+         onkeydown="if(event.key==='Enter')saveKey()">
   <button class="pri" style="width:100%; padding:12px" onclick="saveKey()">Entra</button>
 </div>
 
@@ -189,10 +191,11 @@ function logout() {
 
 async function boot() {
   if (!KEY) { $('gate').hidden = false; $('app').hidden = true; return; }
-  const r = await api('/list?limit=1').catch(() => null);
-  if (!r || r.status === 401) {
+  let r = null, netFail = false;
+  try { r = await api('/list?limit=1'); } catch (e) { netFail = true; }
+  if (netFail || !r || !r.ok) {
     $('gate').hidden = false; $('app').hidden = true;
-    if (r) toast('Chiave non valida', true);
+    toast(netFail ? 'Worker irraggiungibile' : r.status === 401 ? 'Chiave non valida' : 'Errore ' + r.status, true);
     return;
   }
   $('gate').hidden = true; $('app').hidden = false;
@@ -381,16 +384,32 @@ async function pushFile(f) {
 }
 
 // ---------- incolla e trascina ----------
-document.addEventListener('paste', e => {
-  if (document.activeElement === $('txt')) return;
+document.addEventListener('paste', async e => {
+  // Mai rubare l'incolla a un campo in cui si sta scrivendo: la casella
+  // della chiave sta fuori dall'app e prima veniva intercettata anche lei.
+  const el = document.activeElement;
+  if (el && (el.tagName === 'INPUT' || el.tagName === 'TEXTAREA' || el.isContentEditable)) return;
+  if (!KEY) return;
+
   const it = [...(e.clipboardData?.items || [])];
   const img = it.find(i => i.type.startsWith('image/'));
   if (img) { e.preventDefault(); pushFile(img.getAsFile()); return; }
+
   const t = e.clipboardData?.getData('text');
   if (t && t.trim()) {
     e.preventDefault();
-    api('/push?device=web', { method: 'POST', headers: { 'Content-Type': 'text/plain; charset=utf-8' }, body: t })
-      .then(() => { toast('Inviato'); load(true); });
+    try {
+      const r = await api('/push?device=web', {
+        method: 'POST',
+        headers: { 'Content-Type': 'text/plain; charset=utf-8' },
+        body: t,
+      });
+      if (!r.ok) { toast(r.status === 401 ? 'Chiave non valida' : 'Invio fallito', true); return; }
+      toast('Inviato');
+      load(true);
+    } catch (err) {
+      toast('Errore di rete', true);
+    }
   }
 });
 
