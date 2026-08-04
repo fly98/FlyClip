@@ -108,6 +108,19 @@
   .drop{position:fixed; inset:0; background:rgba(76,154,255,.14); border:3px dashed var(--acc);
     display:none; align-items:center; justify-content:center; z-index:60; font-size:19px; font-weight:650}
   .drop.on{display:flex}
+
+  .setup{margin-top:18px;border:1px solid var(--line);border-radius:12px;background:var(--panel);}
+  .setup summary{padding:12px 14px;cursor:pointer;font-weight:600;color:var(--txt);}
+  .setup>p{margin:0 14px 12px;color:var(--dim);font-size:13px;line-height:1.5;}
+  .setup-row{margin:0 14px 14px;}
+  .setup-row b{color:var(--txt);font-size:13px;}
+  .setup-row span{margin-left:6px;font-size:11px;color:var(--acc);border:1px solid var(--line);
+    border-radius:5px;padding:1px 5px;}
+  .setup-row code{display:block;margin:6px 0 4px;padding:9px 11px;background:var(--panel2);
+    border:1px solid var(--line);border-radius:8px;color:var(--acc);font-size:11px;
+    word-break:break-all;cursor:pointer;-webkit-user-select:all;user-select:all;}
+  .setup-row code:active{border-color:var(--acc);}
+  .setup-row small{color:var(--dim);font-size:12px;line-height:1.45;display:block;}
 </style>
 </head>
 <body>
@@ -147,6 +160,27 @@
     </div>
     <input id="q" class="search" placeholder="Cerca…" oninput="render()">
     <div id="list"></div>
+
+    <details class="setup">
+      <summary>URL per i Comandi Rapidi</summary>
+      <p>iOS non importa comandi rapidi non firmati, quindi vanno costruiti a
+         mano. Questi URL hanno già la chiave dentro: toccali per copiarli e
+         incollali nel campo <em>URL</em> dell'azione «Ottieni contenuto di URL».
+         Nessuna intestazione da aggiungere.</p>
+
+      <div class="setup-row">
+        <b>Incolla da cloud</b> <span>GET</span>
+        <code id="urlGet" onclick="copyUrl('urlGet')"></code>
+        <small>Poi aggiungi «Copia negli appunti» col risultato.</small>
+      </div>
+
+      <div class="setup-row">
+        <b>Copia in cloud</b> <span>POST</span>
+        <code id="urlPost" onclick="copyUrl('urlPost')"></code>
+        <small>Prima metti «Ottieni appunti», poi qui imposta metodo POST e
+               corpo richiesta <em>File</em> = Appunti.</small>
+      </div>
+    </details>
   </main>
 </div>
 
@@ -203,6 +237,7 @@ async function boot() {
     return;
   }
   $('gate').hidden = true; $('app').hidden = false;
+  shortcutUrls();
   setTab(tab);
   load(true);
   setInterval(() => load(false), 5000);
@@ -428,6 +463,20 @@ document.addEventListener('paste', async e => {
   }));
 
 document.addEventListener('visibilitychange', () => { if (!document.hidden) load(false); });
+
+
+function shortcutUrls() {
+  $('urlGet').textContent  = API + '/last?k=' + KEY;
+  $('urlPost').textContent = API + '/push?device=iphone&k=' + KEY;
+}
+async function copyUrl(id) {
+  try {
+    await navigator.clipboard.writeText($(id).textContent);
+    toast('URL copiato');
+  } catch (e) {
+    toast('Selezionalo e copialo a mano', true);
+  }
+}
 
 boot();
 </script>
