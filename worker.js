@@ -20,6 +20,7 @@
  *   GET    /meta/:id        metadati JSON
  *   DELETE /item/:id        elimina
  *   POST   /pin/:id         toggle pin (i pinnati non scadono mai)
+ *   POST   /bump/:id        riporta in cima: /last restituira questo
  *   POST   /clear           svuota (tiene i pinnati)
  */
 
@@ -404,6 +405,17 @@ export class Clip {
           val, val ? Date.now() : null, seg[1]
         );
         return json({ ok: true, id: seg[1], pinned: !!val });
+      }
+
+      // POST /bump/:id — riporta in cima, cosi /last restituisce questo.
+      // Serve a scegliere dall'elenco cosa incollare sul telefono: si tocca
+      // Copia sulla pagina e il comando rapido "Incolla" prende quello.
+      if (method === 'POST' && seg[0] === 'bump' && seg[1]) {
+        const r = this.meta(seg[1]);
+        if (!r) return json({ ok: false, error: 'non trovato' }, 404);
+        const ts = Date.now();
+        this.sql.exec(`UPDATE items SET ts = ? WHERE id = ?`, ts, seg[1]);
+        return json({ ok: true, id: seg[1], ts });
       }
 
       // POST /label/:id  — etichetta per lo storico permanente
