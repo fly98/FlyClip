@@ -1,0 +1,412 @@
+<!DOCTYPE html>
+<html lang="it">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
+<meta name="apple-mobile-web-app-capable" content="yes">
+<meta name="apple-mobile-web-app-status-bar-style" content="black-translucent">
+<meta name="theme-color" content="#0e1116">
+<title>FlyClip</title>
+<style>
+  :root{
+    --bg:#0e1116; --panel:#171c24; --panel2:#1e2530; --line:#2a3341;
+    --txt:#e8ecf2; --dim:#8b96a6; --acc:#4c9aff; --ok:#3ddc97; --warn:#ffb020; --bad:#ff5a5f;
+  }
+  *{box-sizing:border-box; -webkit-tap-highlight-color:transparent}
+  body{
+    margin:0; background:var(--bg); color:var(--txt);
+    font:15px/1.45 -apple-system,BlinkMacSystemFont,"SF Pro Text","Segoe UI",Roboto,sans-serif;
+    padding:env(safe-area-inset-top) 0 env(safe-area-inset-bottom);
+  }
+  header{
+    position:sticky; top:0; z-index:20; background:rgba(14,17,22,.88);
+    backdrop-filter:saturate(180%) blur(14px);
+    border-bottom:1px solid var(--line); padding:12px 16px;
+    display:flex; align-items:center; gap:10px;
+  }
+  header h1{margin:0; font-size:17px; font-weight:650; letter-spacing:-.2px}
+  header .sp{flex:1}
+  .dot{width:8px;height:8px;border-radius:50%;background:var(--dim);transition:background .3s}
+  .dot.on{background:var(--ok); box-shadow:0 0 8px var(--ok)}
+  .dot.err{background:var(--bad)}
+  button,.btn{
+    background:var(--panel2); color:var(--txt); border:1px solid var(--line);
+    border-radius:9px; padding:7px 12px; font-size:13px; font-weight:550;
+    cursor:pointer; font-family:inherit;
+  }
+  button:active{transform:scale(.96)}
+  button.pri{background:var(--acc); border-color:var(--acc); color:#fff}
+  main{padding:14px 16px 90px; max-width:760px; margin:0 auto}
+  .compose{
+    background:var(--panel); border:1px solid var(--line); border-radius:14px;
+    padding:12px; margin-bottom:16px;
+  }
+  .compose textarea{
+    width:100%; min-height:64px; resize:vertical; background:var(--panel2);
+    color:var(--txt); border:1px solid var(--line); border-radius:10px;
+    padding:10px; font:14px/1.4 inherit; outline:none;
+  }
+  .compose textarea:focus{border-color:var(--acc)}
+  .compose .row{display:flex; gap:8px; margin-top:10px; align-items:center}
+  .hint{color:var(--dim); font-size:12px; flex:1}
+  .tabs{display:flex; gap:6px; background:var(--panel); border:1px solid var(--line);
+    border-radius:11px; padding:4px; margin-bottom:14px}
+  .tabs button{flex:1; background:transparent; border:none; padding:8px; border-radius:8px;
+    color:var(--dim); font-size:13.5px; font-weight:600}
+  .tabs button.on{background:var(--panel2); color:var(--txt); box-shadow:0 1px 3px rgba(0,0,0,.3)}
+  .label{font-size:13.5px; font-weight:650; color:var(--warn); margin-bottom:6px}
+  .search{
+    width:100%; background:var(--panel); border:1px solid var(--line); border-radius:11px;
+    padding:10px 12px; color:var(--txt); font:14px inherit; outline:none; margin-bottom:14px;
+  }
+  .search:focus{border-color:var(--acc)}
+  .item{
+    background:var(--panel); border:1px solid var(--line); border-radius:14px;
+    padding:12px 14px; margin-bottom:10px; position:relative; overflow:hidden;
+  }
+  .item.pin{border-color:#4a3a12; background:linear-gradient(180deg,#1d1a12,#171c24)}
+  .meta{display:flex; align-items:center; gap:8px; margin-bottom:8px; font-size:11.5px; color:var(--dim)}
+  .tag{
+    background:var(--panel2); border:1px solid var(--line); border-radius:6px;
+    padding:2px 7px; font-size:10.5px; font-weight:650; letter-spacing:.3px; text-transform:uppercase;
+  }
+  .tag.image{color:#c792ea; border-color:#3a2f4a}
+  .tag.url{color:#5ccfe6; border-color:#25404a}
+  .tag.text{color:var(--dim)}
+  .body{
+    white-space:pre-wrap; word-break:break-word; font-size:14px;
+    max-height:150px; overflow:hidden; position:relative;
+  }
+  .body.long::after{
+    content:""; position:absolute; left:0; right:0; bottom:0; height:44px;
+    background:linear-gradient(transparent,var(--panel));
+  }
+  .item.pin .body.long::after{background:linear-gradient(transparent,#1a1813)}
+  .body a{color:var(--acc)}
+  .thumb{max-width:100%; max-height:230px; border-radius:10px; display:block; background:var(--panel2)}
+  .acts{display:flex; gap:7px; margin-top:11px; flex-wrap:wrap}
+  .acts button{padding:6px 11px; font-size:12.5px}
+  .empty{text-align:center; color:var(--dim); padding:60px 20px; font-size:14px}
+  .toast{
+    position:fixed; left:50%; transform:translateX(-50%) translateY(20px);
+    bottom:calc(26px + env(safe-area-inset-bottom)); background:var(--ok); color:#04120c;
+    padding:11px 20px; border-radius:11px; font-weight:650; font-size:14px;
+    opacity:0; transition:all .22s; pointer-events:none; z-index:50;
+    box-shadow:0 8px 28px rgba(0,0,0,.5);
+  }
+  .toast.show{opacity:1; transform:translateX(-50%) translateY(0)}
+  .toast.err{background:var(--bad); color:#fff}
+  .gate{padding:40px 20px; max-width:400px; margin:0 auto; text-align:center}
+  .gate input{
+    width:100%; background:var(--panel); border:1px solid var(--line); border-radius:11px;
+    padding:12px; color:var(--txt); font:15px inherit; outline:none; margin:16px 0;
+  }
+  .drop{position:fixed; inset:0; background:rgba(76,154,255,.14); border:3px dashed var(--acc);
+    display:none; align-items:center; justify-content:center; z-index:60; font-size:19px; font-weight:650}
+  .drop.on{display:flex}
+</style>
+</head>
+<body>
+
+<div id="gate" class="gate" hidden>
+  <h1 style="font-size:22px">FlyClip</h1>
+  <p style="color:var(--dim); font-size:14px">Inserisci la chiave API per accedere alla clipboard condivisa.</p>
+  <input id="gateKey" type="password" placeholder="API key" autocomplete="off">
+  <button class="pri" style="width:100%; padding:12px" onclick="saveKey()">Entra</button>
+</div>
+
+<div id="app" hidden>
+  <header>
+    <span id="dot" class="dot"></span>
+    <h1>FlyClip</h1>
+    <span class="sp"></span>
+    <button onclick="load(true)">Aggiorna</button>
+    <button onclick="logout()">Esci</button>
+  </header>
+
+  <main>
+    <div class="compose">
+      <textarea id="txt" placeholder="Scrivi o incolla qui (⌘V funziona anche con le immagini)…"></textarea>
+      <div class="row">
+        <span class="hint">⌘V / trascina un file per caricare al volo</span>
+        <button onclick="pickFile()">File</button>
+        <button class="pri" onclick="pushText()">Invia</button>
+      </div>
+      <input id="file" type="file" hidden accept="image/*" onchange="pushFile(this.files[0])">
+    </div>
+
+    <div class="tabs">
+      <button id="tabRec" class="on" onclick="setTab('recenti')">Recenti</button>
+      <button id="tabArc" onclick="setTab('archivio')">Archivio</button>
+    </div>
+    <input id="q" class="search" placeholder="Cerca…" oninput="render()">
+    <div id="list"></div>
+  </main>
+</div>
+
+<div id="drop" class="drop">Rilascia per caricare</div>
+<div id="toast" class="toast"></div>
+
+<script>
+const API = 'https://fly-clip.f-castiglioni.workers.dev';
+let KEY = localStorage.getItem('flyclip_key') || '';
+let items = [];
+let saved = [];
+let lastId = null;
+let tab = localStorage.getItem('flyclip_tab') || 'recenti';
+
+const $ = id => document.getElementById(id);
+
+function toast(msg, err) {
+  const t = $('toast');
+  t.textContent = msg;
+  t.className = 'toast show' + (err ? ' err' : '');
+  clearTimeout(t._t);
+  t._t = setTimeout(() => t.className = 'toast', 1900);
+}
+
+function setDot(state) {
+  $('dot').className = 'dot' + (state === 'ok' ? ' on' : state === 'err' ? ' err' : '');
+}
+
+function api(path, opts = {}) {
+  opts.headers = Object.assign({ 'X-API-Key': KEY }, opts.headers || {});
+  return fetch(API + path, opts);
+}
+
+// ---------- auth ----------
+function saveKey() {
+  const k = $('gateKey').value.trim();
+  if (!k) return;
+  KEY = k;
+  localStorage.setItem('flyclip_key', k);
+  boot();
+}
+function logout() {
+  localStorage.removeItem('flyclip_key');
+  location.reload();
+}
+
+async function boot() {
+  if (!KEY) { $('gate').hidden = false; $('app').hidden = true; return; }
+  const r = await api('/list?limit=1').catch(() => null);
+  if (!r || r.status === 401) {
+    $('gate').hidden = false; $('app').hidden = true;
+    if (r) toast('Chiave non valida', true);
+    return;
+  }
+  $('gate').hidden = true; $('app').hidden = false;
+  setTab(tab);
+  load(true);
+  setInterval(() => load(false), 5000);
+}
+
+// ---------- caricamento ----------
+async function load(loud) {
+  try {
+    const [r1, r2] = await Promise.all([
+      api('/list?saved=0&limit=100'),
+      api('/list?saved=1&limit=300'),
+    ]);
+    const d1 = await r1.json(), d2 = await r2.json();
+    if (!d1.ok || !d2.ok) throw new Error(d1.error || d2.error);
+    const changed = (d1.items[0]?.id || null) !== lastId || saved.length !== d2.items.length;
+    items = d1.items;
+    saved = d2.items;
+    lastId = items.length ? items[0].id : null;
+    setDot('ok');
+    if (changed || loud) render();
+  } catch (e) {
+    setDot('err');
+    if (loud) toast('Errore di rete', true);
+  }
+}
+
+function setTab(t) {
+  tab = t;
+  localStorage.setItem('flyclip_tab', t);
+  $('tabRec').className = t === 'recenti' ? 'on' : '';
+  $('tabArc').className = t === 'archivio' ? 'on' : '';
+  render();
+}
+
+function ago(ts) {
+  const s = Math.floor((Date.now() - ts) / 1000);
+  if (s < 60) return 'ora';
+  if (s < 3600) return Math.floor(s / 60) + ' min fa';
+  if (s < 86400) return Math.floor(s / 3600) + ' h fa';
+  const d = new Date(ts);
+  return d.toLocaleDateString('it-IT', { day: '2-digit', month: 'short' }) + ' ' +
+         d.toLocaleTimeString('it-IT', { hour: '2-digit', minute: '2-digit' });
+}
+
+function esc(s) {
+  return String(s).replace(/[&<>"]/g, c => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;' }[c]));
+}
+
+function sizeStr(b) {
+  if (!b) return '';
+  return b < 1024 ? b + ' B' : b < 1048576 ? (b / 1024).toFixed(0) + ' KB' : (b / 1048576).toFixed(1) + ' MB';
+}
+
+function render() {
+  const q = $('q').value.trim().toLowerCase();
+  const src = tab === 'archivio' ? saved : items;
+  const list = src.filter(i => !q ||
+    (i.preview || '').toLowerCase().includes(q) ||
+    (i.label || '').toLowerCase().includes(q) ||
+    (i.name || '').toLowerCase().includes(q));
+  if (!list.length) {
+    const msg = q ? 'Nessun risultato'
+      : tab === 'archivio'
+        ? 'Archivio vuoto.<br>Premi <b>Salva</b> su un elemento<br>per conservarlo per sempre.'
+        : 'Clipboard vuota.<br>Copia qualcosa dal telefono.';
+    $('list').innerHTML = '<div class="empty">' + msg + '</div>';
+    return;
+  }
+  $('list').innerHTML = list.map(i => {
+    const isImg = i.kind === 'image';
+    const body = isImg
+      ? `<img class="thumb" loading="lazy" src="${API}/item/${i.id}?k=${encodeURIComponent(KEY)}" alt="">`
+      : `<div class="body${(i.preview || '').length > 300 ? ' long' : ''}">${esc(i.preview || '')}</div>`;
+    return `<div class="item${i.pinned ? ' pin' : ''}">
+      <div class="meta">
+        <span class="tag ${i.kind}">${i.kind}</span>
+        <span>${ago(i.ts)}</span>
+        ${i.size ? `<span>· ${sizeStr(i.size)}</span>` : ''}
+      </div>
+      ${i.label ? `<div class="label">${esc(i.label)}</div>` : ''}
+      ${body}
+      <div class="acts">
+        <button class="pri" onclick="copyItem('${i.id}','${i.kind}')">Copia</button>
+        ${i.kind === 'url' ? `<button onclick="openUrl('${i.id}')">Apri</button>` : ''}
+        ${isImg ? `<button onclick="window.open('${API}/item/${i.id}?k=${encodeURIComponent(KEY)}','_blank')">Apri</button>` : ''}
+        <button onclick="pin('${i.id}')">${i.pinned ? 'Togli' : 'Salva'}</button>
+        ${i.pinned ? `<button onclick="setLabel('${i.id}')">${i.label ? 'Rinomina' : 'Etichetta'}</button>` : ''}
+        <button onclick="del('${i.id}')">Elimina</button>
+      </div>
+    </div>`;
+  }).join('');
+}
+
+// ---------- azioni ----------
+async function copyItem(id, kind) {
+  try {
+    if (kind === 'image') {
+      const r = await api('/item/' + id);
+      const blob = await r.blob();
+      // Safari accetta solo image/png in ClipboardItem
+      if (blob.type === 'image/png') {
+        await navigator.clipboard.write([new ClipboardItem({ 'image/png': blob })]);
+      } else {
+        const png = await toPng(blob);
+        await navigator.clipboard.write([new ClipboardItem({ 'image/png': png })]);
+      }
+      toast('Immagine copiata');
+    } else {
+      const r = await api('/item/' + id + '?format=text');
+      const t = await r.text();
+      await navigator.clipboard.writeText(t);
+      toast('Copiato');
+    }
+  } catch (e) {
+    toast('Copia non riuscita: ' + e.message, true);
+  }
+}
+
+function toPng(blob) {
+  return new Promise((res, rej) => {
+    const img = new Image();
+    img.onload = () => {
+      const c = document.createElement('canvas');
+      c.width = img.width; c.height = img.height;
+      c.getContext('2d').drawImage(img, 0, 0);
+      c.toBlob(b => b ? res(b) : rej(new Error('conversione fallita')), 'image/png');
+    };
+    img.onerror = () => rej(new Error('immagine illeggibile'));
+    img.src = URL.createObjectURL(blob);
+  });
+}
+
+async function openUrl(id) {
+  const r = await api('/item/' + id + '?format=text');
+  window.open((await r.text()).trim(), '_blank');
+}
+
+async function pin(id) {
+  const r = await api('/pin/' + id, { method: 'POST' });
+  const d = await r.json();
+  toast(d.pinned ? 'Salvato in archivio' : 'Rimosso dall\'archivio');
+  load(true);
+}
+
+async function setLabel(id) {
+  const cur = (saved.find(x => x.id === id) || {}).label || '';
+  const v = prompt('Etichetta per questo elemento:', cur);
+  if (v === null) return;
+  await api('/label/' + id, {
+    method: 'POST',
+    headers: { 'Content-Type': 'text/plain; charset=utf-8' },
+    body: v.trim(),
+  });
+  load(true);
+}
+async function del(id) { await api('/item/' + id, { method: 'DELETE' }); load(true); }
+
+async function pushText() {
+  const t = $('txt').value;
+  if (!t.trim()) return;
+  const r = await api('/push?device=web', {
+    method: 'POST',
+    headers: { 'Content-Type': 'text/plain; charset=utf-8' },
+    body: t,
+  });
+  if (r.ok) { $('txt').value = ''; toast('Inviato'); load(true); }
+  else toast('Invio fallito', true);
+}
+
+function pickFile() { $('file').click(); }
+
+async function pushFile(f) {
+  if (!f) return;
+  toast('Carico…');
+  const r = await api('/push?device=web&name=' + encodeURIComponent(f.name), {
+    method: 'POST',
+    headers: { 'Content-Type': f.type || 'application/octet-stream' },
+    body: f,
+  });
+  if (r.ok) { toast('Caricato'); load(true); }
+  else toast('Upload fallito', true);
+  $('file').value = '';
+}
+
+// ---------- incolla e trascina ----------
+document.addEventListener('paste', e => {
+  if (document.activeElement === $('txt')) return;
+  const it = [...(e.clipboardData?.items || [])];
+  const img = it.find(i => i.type.startsWith('image/'));
+  if (img) { e.preventDefault(); pushFile(img.getAsFile()); return; }
+  const t = e.clipboardData?.getData('text');
+  if (t && t.trim()) {
+    e.preventDefault();
+    api('/push?device=web', { method: 'POST', headers: { 'Content-Type': 'text/plain; charset=utf-8' }, body: t })
+      .then(() => { toast('Inviato'); load(true); });
+  }
+});
+
+['dragenter', 'dragover'].forEach(ev =>
+  document.addEventListener(ev, e => { e.preventDefault(); $('drop').classList.add('on'); }));
+['dragleave', 'drop'].forEach(ev =>
+  document.addEventListener(ev, e => {
+    e.preventDefault();
+    if (ev === 'dragleave' && e.relatedTarget) return;
+    $('drop').classList.remove('on');
+    if (ev === 'drop' && e.dataTransfer.files[0]) pushFile(e.dataTransfer.files[0]);
+  }));
+
+document.addEventListener('visibilitychange', () => { if (!document.hidden) load(false); });
+
+boot();
+</script>
+</body>
+</html>
