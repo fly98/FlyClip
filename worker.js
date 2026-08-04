@@ -41,6 +41,24 @@ const json = (obj, status = 200) =>
     headers: { 'Content-Type': 'application/json; charset=utf-8', ...CORS },
   });
 
+const isBlob = (kind) => kind === 'image' || kind === 'file';
+
+const EXT = {
+  'application/pdf': 'pdf', 'application/zip': 'zip', 'text/csv': 'csv',
+  'application/json': 'json', 'image/png': 'png', 'image/jpeg': 'jpg',
+  'image/heic': 'heic', 'image/gif': 'gif', 'image/webp': 'webp',
+  'application/msword': 'doc', 'application/rtf': 'rtf',
+  'application/vnd.openxmlformats-officedocument.wordprocessingml.document': 'docx',
+  'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet': 'xlsx',
+};
+
+/** Nome di salvataggio: quello originale se c'e, altrimenti dedotto dal MIME. */
+function fileName(row) {
+  if (row.name) return row.name;
+  const ext = EXT[row.mime] || (row.mime || '').split('/')[1] || 'bin';
+  return `flyclip-${row.id}.${ext}`;
+}
+
 function newId() {
   return Date.now().toString(36) + '-' + Math.random().toString(36).slice(2, 8);
 }
@@ -202,13 +220,14 @@ export class Clip {
       return json({ ok: true, ...row, pinned: !!row.pinned });
     }
 
-    if (row.kind === 'image' && format !== 'text') {
+    if (isBlob(row.kind) && format !== 'text') {
       const bytes = this.blob(row.id);
       if (!bytes) return json({ ok: false, error: 'blob mancante' }, 404);
       return new Response(bytes, {
         headers: {
-          'Content-Type': row.mime || 'image/png',
-          'Content-Disposition': `inline; filename="${row.name || 'clip.png'}"`,
+          'Content-Type': row.mime || 'application/octet-stream',
+          'Content-Disposition':
+            `${row.kind === 'image' ? 'inline' : 'attachment'}; filename="${fileName(row)}"`,
           'X-Clip-Id': row.id,
           'X-Clip-Kind': row.kind,
           'Cache-Control': 'no-store',
@@ -255,16 +274,22 @@ export class Clip {
             const text = rtfToText(String(b.text ?? ''));
             payload = { kind: b.kind || guessKind(null, text), text, device: b.device || device, name: b.name || nameHdr };
           }
-        } else if (ct.startsWith('image/') || ct.startsWith('application/octet-stream')) {
+        } else if (ct && !ct.startsWith('text/')) {
+          // qualunque cosa non sia testo viaggia come binario: immagini,
+          // PDF, documenti, archivi. Solo le immagini si mostrano in anteprima.
           const buf = await request.arrayBuffer();
           if (buf.byteLength > MAX_BYTES) return json({ ok: false, error: 'troppo grande' }, 413);
-          payload = { kind: 'image', bytes: buf, mime: ct.split(';')[0], name: nameHdr, device };
+          const mime = ct.split(';')[0].trim();
+          payload = {
+            kind: mime.startsWith('image/') ? 'image' : 'file',
+            bytes: buf, mime, name: nameHdr, device,
+          };
         } else {
           const text = rtfToText(await request.text());
           payload = { kind: guessKind(null, text), text, device, name: nameHdr };
         }
 
-        if (payload.kind !== 'image' && !String(payload.text || '').trim()) {
+        if (!isBlob(payload.kind) && !String(payload.text || '').trim()) {
           return json({ ok: false, error: 'contenuto vuoto' }, 400);
         }
         const res = this.insert(payload);
@@ -293,7 +318,7 @@ export class Clip {
         const limit = Math.min(parseInt(url.searchParams.get('limit') || '60', 10), 500);
         const saved = url.searchParams.get('saved');
         const cols = `id, ts, kind, mime, name, size, pinned, device, label, saved_at,
-                  CASE WHEN kind = 'image' THEN NULL ELSE substr(text, 1, 400) END AS preview`;
+                  CASE WHEN kind IN ('image','file') THEN NULL ELSE substr(text, 1, 400) END AS preview`;
         let items;
         if (saved === '1') {
           items = this.rows(
